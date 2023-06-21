@@ -1,0 +1,2 @@
+scp -r user@192.168.0.100:/home/user/remote_folder /path/to/local_folder
+
