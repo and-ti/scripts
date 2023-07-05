@@ -1,2 +1,9 @@
 scp -r user@192.168.0.100:/home/user/remote_folder /path/to/local_folder
 
+
+
+sudo apt install acl
+
+sudo chmod 775 /home/anand/docker
+sudo setfacl -Rdm g:docker:rwx /home/{user-desktop}/docker
+sudo setfacl -Rm g:docker:rwx /home/{user-desktop}/docker
