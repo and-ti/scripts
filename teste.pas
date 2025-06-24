@@ -198,7 +198,6 @@ var
   AnimOpacity, AnimScale: TFloatAnimation;
   LWidth, LHeight: Single;
 begin
-  // Procura pelo primeiro layout VISÍVEL de cima para baixo
   for I := lyPai.ChildrenCount - 1 downto 0 do
   begin
     if (lyPai.Children[I] is TLayout) and (TLayout(lyPai.Children[I]).Visible) then
@@ -206,36 +205,45 @@ begin
       ly  := TLayout(lyPai.Children[I]);
       frm := TCommonCustomForm(ly.TagObject);
 
-      // Desativa o Align para permitir a animação
-      LWidth := ly.Width;
-      LHeight := ly.Height;
-      ly.Align := TAlignLayout.None;
-      ly.Width := LWidth;
-      ly.Height := LHeight;
+      // --- INÍCIO DA CORREÇÃO ---
+      // Pausa o gerenciamento de layout do pai
+      lyPai.BeginUpdate;
+      try
+        // Desativa o Align para permitir a animação
+        LWidth := ly.Width;
+        LHeight := ly.Height;
+        ly.Align := TAlignLayout.None;
+        ly.Width := LWidth;
+        ly.Height := LHeight;
 
-      AnimOpacity := TFloatAnimation.Create(ly);
-      AnimOpacity.Parent := ly;
-      AnimOpacity.AnimationType := TAnimationType.Out;
-      AnimOpacity.Interpolation := TInterpolationType.Quadratic;
-      AnimOpacity.Duration := 0.3;
-      AnimOpacity.PropertyName := 'Opacity';
-      AnimOpacity.StopValue := 0;
-      AnimOpacity.Start;
+        AnimOpacity := TFloatAnimation.Create(ly);
+        AnimOpacity.Parent := ly;
+        AnimOpacity.AnimationType := TAnimationType.Out;
+        AnimOpacity.Interpolation := TInterpolationType.Quadratic;
+        AnimOpacity.Duration := 0.3;
+        AnimOpacity.PropertyName := 'Opacity';
+        AnimOpacity.StopValue := 0;
+        AnimOpacity.Start;
 
-      AnimScale := TFloatAnimation.Create(ly);
-      AnimScale.Parent := ly;
-      AnimScale.AnimationType := TAnimationType.Out;
-      AnimScale.Interpolation := TInterpolationType.Quadratic;
-      AnimScale.Duration := 0.3;
-      AnimScale.PropertyName := 'Scale.Y';
-      AnimScale.StopValue := 0;
+        AnimScale := TFloatAnimation.Create(ly);
+        AnimScale.Parent := ly;
+        AnimScale.AnimationType := TAnimationType.Out;
+        AnimScale.Interpolation := TInterpolationType.Quadratic;
+        AnimScale.Duration := 0.3;
+        AnimScale.PropertyName := 'Scale.Y';
+        AnimScale.StopValue := 0;
 
-      AnimScale.Tag := NativeInt(frm);
-      AnimScale.OnFinish := CloseAnimationFinish;
-      AnimScale.Start;
+        AnimScale.Tag := NativeInt(frm);
+        AnimScale.OnFinish := CloseAnimationFinish;
+        AnimScale.Start;
+      finally
+        // Retoma o gerenciamento de layout
+        lyPai.EndUpdate;
+      end;
+      // --- FIM DA CORREÇÃO ---
 
       lyPai.Repaint;
-      Exit; // Sai após encontrar e animar o layout do topo
+      Exit;
     end;
   end;
 end;
@@ -247,42 +255,50 @@ var
   AnimPos, AnimOpacity: TFloatAnimation;
   LWidth, LHeight: Single;
 begin
-  // Procura pelo primeiro layout VISÍVEL de cima para baixo
   for I := lyPai.ChildrenCount - 1 downto 0 do
   begin
     if (lyPai.Children[I] is TLayout) and (TLayout(lyPai.Children[I]).Visible) then
     begin
       ly := TLayout(lyPai.Children[I]);
 
-      // Desativa o Align para permitir a animação
-      LWidth := ly.Width;
-      LHeight := ly.Height;
-      ly.Align := TAlignLayout.None;
-      ly.Width := LWidth;
-      ly.Height := LHeight;
+      // --- INÍCIO DA CORREÇÃO ---
+      // Pausa o gerenciamento de layout do pai
+      lyPai.BeginUpdate;
+      try
+        // Desativa o Align para permitir a animação
+        LWidth := ly.Width;
+        LHeight := ly.Height;
+        ly.Align := TAlignLayout.None;
+        ly.Width := LWidth;
+        ly.Height := LHeight;
 
-      ly.TagFloat := MainForm.Height;
+        ly.TagFloat := MainForm.Height;
 
-      AnimOpacity := TFloatAnimation.Create(ly);
-      AnimOpacity.Parent := ly;
-      AnimOpacity.AnimationType := TAnimationType.Out;
-      AnimOpacity.Interpolation := TInterpolationType.Quadratic;
-      AnimOpacity.Duration := 0.3;
-      AnimOpacity.PropertyName := 'Opacity';
-      AnimOpacity.StopValue := 0;
-      AnimOpacity.Start;
+        AnimOpacity := TFloatAnimation.Create(ly);
+        AnimOpacity.Parent := ly;
+        AnimOpacity.AnimationType := TAnimationType.Out;
+        AnimOpacity.Interpolation := TInterpolationType.Quadratic;
+        AnimOpacity.Duration := 0.3;
+        AnimOpacity.PropertyName := 'Opacity';
+        AnimOpacity.StopValue := 0;
+        AnimOpacity.Start;
 
-      AnimPos := TFloatAnimation.Create(ly);
-      AnimPos.Parent := ly;
-      AnimPos.Duration := 0.3;
-      AnimPos.PropertyName := 'Position.Y';
-      AnimPos.StopValue := MainForm.Height;
+        AnimPos := TFloatAnimation.Create(ly);
+        AnimPos.Parent := ly;
+        AnimPos.Duration := 0.3;
+        AnimPos.PropertyName := 'Position.Y';
+        AnimPos.StopValue := MainForm.Height;
 
-      AnimPos.Tag := NativeInt(ly);
-      AnimPos.OnFinish := MinimizeAnimationFinish;
-      AnimPos.Start;
+        AnimPos.Tag := NativeInt(ly);
+        AnimPos.OnFinish := MinimizeAnimationFinish;
+        AnimPos.Start;
+      finally
+        // Retoma o gerenciamento de layout
+        lyPai.EndUpdate;
+      end;
+      // --- FIM DA CORREÇÃO ---
 
-      Exit; // Sai após encontrar e animar o layout do topo
+      Exit;
     end;
   end;
 end;
