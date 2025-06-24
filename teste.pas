@@ -3,62 +3,62 @@ unit frm_Main;
 interface
 
 uses
-  FMX.Forms, FMX.Controls, FMX.Layouts, FMX.StdCtrls,
-  System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
-  FMX.Types, FMX.Graphics, FMX.Dialogs, FMX.Controls.Presentation,
-  System.Generics.Collections, FMX.Ani,
-  frm_1, frm_2, frm_3, FMX.Objects, frm_filho_header, frm_home;
+  FMX.Forms, FMX.Controls, FMX.Layouts, FMX.StdCtrls,
+  System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
+  FMX.Types, FMX.Graphics, FMX.Dialogs, FMX.Controls.Presentation,
+  System.Generics.Collections, FMX.Ani,
+  frm_1, frm_2, frm_3, FMX.Objects, frm_filho_header, frm_home;
 
 type
-  TTaskBarButton = record
-    Form: TCommonCustomForm;
-    Button: TSpeedButton;
-  end;
+  TTaskBarButton = record
+    Form: TCommonCustomForm;
+    Button: TSpeedButton;
+  end;
 
 var
-  TaskBarList: TList<TTaskBarButton>;
+  TaskBarList: TList<TTaskBarButton>;
 
 type
-  TFormClass = class of TForm;
-  TMainForm = class(TForm)
-    bar_NavBar: TToolBar;
-    fly_FormsAbertos: TFlowLayout;
-    bt_Form1: TButton;
-    bt_Form2: TButton;
-    bt_Form3: TButton;
-    lyPaiFundo: TLayout;
-    lyHeader: TLayout;
-    imgFechar: TImage;
-    imgMinimizar: TImage;
-    lbSubTitulo: TLabel;
-    lbTitulo: TLabel;
-    lyPai: TLayout;
-    lyHeaderAcoes: TLayout;
-    procedure FormCreate(Sender: TObject);
-    procedure FormDestroy(Sender: TObject);
-    procedure bt_Form1Click(Sender: TObject);
-    procedure bt_Form2Click(Sender: TObject);
-    procedure bt_Form3Click(Sender: TObject);
-    procedure ChildFormClose(Sender: TObject);
-    procedure ChildFormMinimize(Sender: TObject);
-    procedure lyPaiFundoPainting(Sender: TObject; Canvas: TCanvas; const ARect: TRectF);
-    procedure FormShow(Sender: TObject);
-  private
+  TFormClass = class of TForm;
+  TMainForm = class(TForm)
+    bar_NavBar: TToolBar;
+    fly_FormsAbertos: TFlowLayout;
+    bt_Form1: TButton;
+    bt_Form2: TButton;
+    bt_Form3: TButton;
+    lyPaiFundo: TLayout;
+    lyHeader: TLayout;
+    imgFechar: TImage;
+    imgMinimizar: TImage;
+    lbSubTitulo: TLabel;
+    lbTitulo: TLabel;
+    lyPai: TLayout;
+    lyHeaderAcoes: TLayout;
+    procedure FormCreate(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
+    procedure bt_Form1Click(Sender: TObject);
+    procedure bt_Form2Click(Sender: TObject);
+    procedure bt_Form3Click(Sender: TObject);
+    procedure ChildFormClose(Sender: TObject);
+    procedure ChildFormMinimize(Sender: TObject);
+    procedure lyPaiFundoPainting(Sender: TObject; Canvas: TCanvas; const ARect: TRectF);
+    procedure FormShow(Sender: TObject);
+  private
     // NOVO: Procedimento centralizado para atualizar o cabeçalho.
-    procedure UpdateHeaderInfo(const AActiveLayout: TLayout);
-    procedure ChildFormOnClose(Sender: TObject; var Action: TCloseAction);
-    procedure TaskBarButtonClick(Sender: TObject);
-    procedure ShowChildForm(FormClass: TFormClass);
-    function FindChildForm(FormClass: TFormClass): TForm;
-    function FindChildLayout(Parent: TComponent): TLayout;
-    procedure CriaBotao(Form: TForm);
-    { Private declarations }
-  public
-    { Public declarations }
-  end;
+    procedure UpdateHeaderInfo(const AActiveLayout: TLayout);
+    procedure ChildFormOnClose(Sender: TObject; var Action: TCloseAction);
+    procedure TaskBarButtonClick(Sender: TObject);
+    procedure ShowChildForm(FormClass: TFormClass);
+    function FindChildForm(FormClass: TFormClass): TForm;
+    function FindChildLayout(Parent: TComponent): TLayout;
+    procedure CriaBotao(Form: TForm);
+    { Private declarations }
+  public
+    { Public declarations }
+  end;
 
 var
-  MainForm: TMainForm;
+  MainForm: TMainForm;
 
 implementation
 
