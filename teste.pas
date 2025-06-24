@@ -43,7 +43,6 @@ type
     procedure ChildFormMinimize(Sender: TObject);
     procedure FormShow(Sender: TObject);
   private
-    // NOVO: Procedimento centralizado para atualizar o cabeçalho.
     procedure UpdateHeaderInfo(const AActiveLayout: TLayout);
     procedure ChildFormOnClose(Sender: TObject; var Action: TCloseAction);
     procedure TaskBarButtonClick(Sender: TObject);
@@ -191,21 +190,31 @@ begin
   Action := TCloseAction.caFree;
 end;
 
-// --- ALTERADO: Adicionada animação de escala ao fechar ---
+// --- CORRIGIDO ---
 procedure TMainForm.ChildFormClose(Sender: TObject);
 var
   I: Integer;
   ly: TLayout;
   frm: TCommonCustomForm;
-  AnimOpacity, AnimScale: TFloatAnimation; // Duas variáveis de animação
+  AnimOpacity, AnimScale: TFloatAnimation;
+  LWidth, LHeight: Single; // Variáveis para capturar o tamanho
 begin
   for I := lyPai.ChildrenCount - 1 downto 0 do
   begin
-    // Pega o layout que está no topo (o que será fechado)
     ly  := TLayout(lyPai.Children[I]);
     frm := TCommonCustomForm(ly.TagObject);
 
-    // 1. Animação de Opacidade (fade-out)
+    // --- Início da Correção ---
+    // 1. Capturar as dimensões atuais
+    LWidth := ly.Width;
+    LHeight := ly.Height;
+    // 2. Desativar o alinhamento para permitir a animação
+    ly.Align := TAlignLayout.None;
+    // 3. Restaurar as dimensões para evitar "saltos" visuais
+    ly.Width := LWidth;
+    ly.Height := LHeight;
+    // --- Fim da Correção ---
+
     AnimOpacity := TFloatAnimation.Create(ly);
     AnimOpacity.Parent := ly;
     AnimOpacity.AnimationType := TAnimationType.Out;
@@ -213,9 +222,8 @@ begin
     AnimOpacity.Duration := 0.3;
     AnimOpacity.PropertyName := 'Opacity';
     AnimOpacity.StopValue := 0;
-    AnimOpacity.Start; // Inicia a primeira animação
+    AnimOpacity.Start;
 
-    // 2. Animação de Escala (encolhimento)
     AnimScale := TFloatAnimation.Create(ly);
     AnimScale.Parent := ly;
     AnimScale.AnimationType := TAnimationType.Out;
@@ -224,29 +232,38 @@ begin
     AnimScale.PropertyName := 'Scale.Y';
     AnimScale.StopValue := 0;
 
-    // 3. Lógica de Finalização
-    // Armazena o ponteiro do formulário na Tag da animação de escala
     AnimScale.Tag := NativeInt(frm);
-    // Atribui o OnFinish a APENAS UMA das animações para evitar chamadas duplicadas
     AnimScale.OnFinish := CloseAnimationFinish;
-    AnimScale.Start; // Inicia a segunda animação
+    AnimScale.Start;
 
     lyPai.Repaint;
-    // Sai do loop após iniciar a animação para o formulário do topo
     Exit;
   end;
 end;
 
+// --- CORRIGIDO ---
 procedure TMainForm.ChildFormMinimize(Sender: TObject);
 var
   I: Integer;
   ly: TLayout;
   AnimPos, AnimOpacity: TFloatAnimation;
+  LWidth, LHeight: Single; // Variáveis para capturar o tamanho
 begin
   for I := lyPai.ChildrenCount - 1 downto 0 do
   begin
     ly := TLayout(lyPai.Children[I]);
+
+    // --- Início da Correção ---
+    // 1. Capturar as dimensões atuais
+    LWidth := ly.Width;
+    LHeight := ly.Height;
+    // 2. Desativar o alinhamento para permitir a animação
     ly.Align := TAlignLayout.None;
+    // 3. Restaurar as dimensões para evitar "saltos" visuais
+    ly.Width := LWidth;
+    ly.Height := LHeight;
+    // --- Fim da Correção ---
+
     ly.TagFloat := MainForm.Height;
 
     AnimOpacity := TFloatAnimation.Create(ly);
