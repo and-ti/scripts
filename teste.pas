@@ -47,7 +47,7 @@ type
     FOwner: TComponent;
     FHomeFormClass: TFormClass;
     FIsDestroying: Boolean;
-    FIsMinimizing: Boolean; // CORREÇÃO: Flag para indicar que uma minimização está em progresso
+    FIsMinimizing: Boolean;
 
     // --- Métodos Internos de Lógica e UI ---
     procedure ActivateForm(AInfo: TChildFormInfo; AIsNew: Boolean);
@@ -131,7 +131,7 @@ begin
   FMainFormHeight := AMainFormHeight;
   FHomeFormClass := AHomeFormClass;
   FIsDestroying := False;
-  FIsMinimizing := False; // CORREÇÃO: Inicializa a flag
+  FIsMinimizing := False;
 
   // Inicializa o estado interno
   FOpenForms := TDictionary<TFormClass, TChildFormInfo>.Create;
@@ -190,7 +190,6 @@ begin
   if Layout.Parent <> FParentLayout then
     Layout.Parent := FParentLayout;
 
-  // Traz o layout do novo form para a frente
   Layout.BringToFront;
 
   if AIsNew then
@@ -204,20 +203,37 @@ begin
   end
   else
   begin
-    // O FORM JÁ EXISTE. VERIFICA SE ESTAVA MINIMIZADO OU SÓ EM SEGUNDO PLANO
-    // A propriedade 'Visible' do layout é setada para False quando o form é minimizado.
     if not Layout.Visible then
     begin
-      // ANIMAÇÃO PARA "DESMINIMIZAR": Sobe da base da tela
-      Layout.Align := TAlignLayout.Client; // Restaura o alinhamento
-      Layout.Visible := True;
-      Layout.Opacity := 1;
-      Layout.Position.Y := FMainFormHeight; // Posição inicial da animação
-      TAnimator.AnimateFloat(Layout, 'Position.Y', 0, 0.3, TAnimationType.Out, TInterpolationType.Quadratic);
+      // CORREÇÃO: ANIMAÇÃO PARA "DESMINIMIZAR"
+      // A animação de posição só funciona com Align = None.
+      // O alinhamento para Client será restaurado no OnFinish da animação.
+      Layout.Visible := True;
+      Layout.Opacity := 1;
+      Layout.Position.Y := FMainFormHeight; // Posição inicial fora da tela
+
+      var AnimPos := TFloatAnimation.Create(Layout);
+      AnimPos.Parent := Layout;
+      AnimPos.PropertyName := 'Position.Y';
+      AnimPos.StopValue := 0;
+      AnimPos.Duration := 0.3;
+      AnimPos.AnimationType := TAnimationType.Out;
+      AnimPos.Interpolation := TInterpolationType.Quadratic;
+      // Define um evento OnFinish para restaurar o alinhamento quando a animação terminar
+      AnimPos.OnFinish := procedure(Sender: TObject)
+                          begin
+                            // Garante que o layout ocupe todo o espaço após a animação
+                            if Assigned(Layout) then
+                            begin
+                              Layout.Align := TAlignLayout.Client;
+                            end;
+                            // Limpa o evento para evitar chamadas múltiplas
+                            (Sender as TFloatAnimation).OnFinish := nil;
+                          end;
+      AnimPos.Start;
     end
     else
     begin
-      // CORREÇÃO: Verifica se a ativação é por causa de uma minimização
       if FIsMinimizing then
       begin
         // Apenas torna o form visível sem animação, pois ele já estava na tela.
@@ -226,11 +242,10 @@ begin
       else
       begin
         // ANIMAÇÃO PADRÃO (clique na taskbar): O form já estava visível, mas atrás de outro.
-        // Usa Opacity para trazê-lo à frente.
-        Layout.Align := TAlignLayout.Client;
-        Layout.Visible := True;
-        Layout.Opacity := 0; // Inicia transparente
-        TAnimator.AnimateFloat(Layout, 'Opacity', 1, 0.25); // Animação de fade-in
+        Layout.Align := TAlignLayout.Client;
+        Layout.Visible := True;
+        Layout.Opacity := 0; // Inicia transparente
+        TAnimator.AnimateFloat(Layout, 'Opacity', 1, 0.25); // Animação de fade-in
       end;
     end;
   end;
@@ -329,7 +344,6 @@ begin
   if not Assigned(FActiveFormInfo) then
     Exit;
 
-  // CORREÇÃO: Sinaliza que a minimização começou
   FIsMinimizing := True;
 
   var Layout := FActiveFormInfo.ContentLayout;
@@ -374,8 +388,6 @@ begin
 
   if Assigned(MinimizedInfo) then
   begin
-    // É aqui que marcamos o layout como não visível,
-    // permitindo que a lógica em 'ActivateForm' funcione.
     MinimizedInfo.ContentLayout.Visible := False;
     FActivationHistory.Remove(MinimizedInfo);
   end;
@@ -388,7 +400,6 @@ begin
   FParentLayout.Repaint;
   Anim.OnFinish := nil;
 
-  // CORREÇÃO: Sinaliza que a minimização terminou
   FIsMinimizing := False;
 end;
 
