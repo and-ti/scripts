@@ -58,6 +58,8 @@ type
     // --- Callbacks de Animação ---
     procedure OnCloseAnimationFinished(Sender: TObject);
     procedure OnMinimizeAnimationFinished(Sender: TObject);
+    // CORREÇÃO: Novo método para o evento OnFinish da animação de restaurar
+    procedure OnRestoreFromMinimizeFinished(Sender: TObject);
 
   public
     constructor Create(
@@ -177,9 +179,6 @@ begin
   ActivateForm(Info, IsNew);
 end;
 
-// =============================================================================
-// ALTERAÇÃO PRINCIPAL ABAIXO
-// =============================================================================
 procedure TFormManager.ActivateForm(AInfo: TChildFormInfo; AIsNew: Boolean);
 begin
   if not Assigned(AInfo) or not Assigned(AInfo.ContentLayout) then
@@ -206,11 +205,9 @@ begin
     if not Layout.Visible then
     begin
       // CORREÇÃO: ANIMAÇÃO PARA "DESMINIMIZAR"
-      // A animação de posição só funciona com Align = None.
-      // O alinhamento para Client será restaurado no OnFinish da animação.
       Layout.Visible := True;
       Layout.Opacity := 1;
-      Layout.Position.Y := FMainFormHeight; // Posição inicial fora da tela
+      Layout.Position.Y := FMainFormHeight;
 
       var AnimPos := TFloatAnimation.Create(Layout);
       AnimPos.Parent := Layout;
@@ -219,33 +216,26 @@ begin
       AnimPos.Duration := 0.3;
       AnimPos.AnimationType := TAnimationType.Out;
       AnimPos.Interpolation := TInterpolationType.Quadratic;
-      // Define um evento OnFinish para restaurar o alinhamento quando a animação terminar
-      AnimPos.OnFinish := procedure(Sender: TObject)
-                          begin
-                            // Garante que o layout ocupe todo o espaço após a animação
-                            if Assigned(Layout) then
-                            begin
-                              Layout.Align := TAlignLayout.Client;
-                            end;
-                            // Limpa o evento para evitar chamadas múltiplas
-                            (Sender as TFloatAnimation).OnFinish := nil;
-                          end;
+      // Armazena o layout no TagObject para que o evento OnFinish saiba qual componente alinhar
+      AnimPos.TagObject := Layout;
+      // Atribui o método de evento compatível
+      AnimPos.OnFinish := OnRestoreFromMinimizeFinished;
       AnimPos.Start;
     end
     else
     begin
       if FIsMinimizing then
       begin
-        // Apenas torna o form visível sem animação, pois ele já estava na tela.
+        // Apenas torna o form visível sem animação
         Layout.Opacity := 1;
       end
       else
       begin
-        // ANIMAÇÃO PADRÃO (clique na taskbar): O form já estava visível, mas atrás de outro.
+        // ANIMAÇÃO PADRÃO (clique na taskbar)
         Layout.Align := TAlignLayout.Client;
         Layout.Visible := True;
-        Layout.Opacity := 0; // Inicia transparente
-        TAnimator.AnimateFloat(Layout, 'Opacity', 1, 0.25); // Animação de fade-in
+        Layout.Opacity := 0;
+        TAnimator.AnimateFloat(Layout, 'Opacity', 1, 0.25);
       end;
     end;
   end;
@@ -401,6 +391,24 @@ begin
   Anim.OnFinish := nil;
 
   FIsMinimizing := False;
+end;
+
+// CORREÇÃO: Implementação do novo método de evento
+procedure TFormManager.OnRestoreFromMinimizeFinished(Sender: TObject);
+var
+  Anim: TFloatAnimation;
+  LayoutToRestore: TLayout;
+begin
+  Anim := Sender as TFloatAnimation;
+  // Verifica se o TagObject é o layout que esperamos
+  if Assigned(Anim.TagObject) and (Anim.TagObject is TLayout) then
+  begin
+    LayoutToRestore := TLayout(Anim.TagObject);
+    // Restaura o alinhamento para que o layout preencha a área do pai
+    LayoutToRestore.Align := TAlignLayout.Client;
+  end;
+  // Limpa o evento para evitar chamadas futuras
+  Anim.OnFinish := nil;
 end;
 
 end.
