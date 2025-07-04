@@ -1,463 +1,378 @@
-unit frm_Main;
+unit uFormManager;
 
 interface
 
 uses
-  FMX.Forms, FMX.Controls, FMX.Layouts, FMX.StdCtrls,
-  System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
-  FMX.Types, FMX.Graphics, FMX.Dialogs, FMX.Controls.Presentation,
-  System.Generics.Collections, FMX.Ani,
-  frm_1, frm_2, frm_3, FMX.Objects, frm_filho_header, frm_home;
-
-type
-  TTaskBarButton = record
-    Form: TCommonCustomForm;
-    Button: TSpeedButton;
-  end;
-
-var
-  TaskBarList: TList<TTaskBarButton>;
+  System.SysUtils, System.Classes, System.Generics.Collections, FMX.Forms,
+  FMX.Controls, FMX.StdCtrls, FMX.Layouts, FMX.Ani, FMX.Objects,
+  System.UITypes, FMX.Types;
 
 type
   TFormClass = class of TForm;
-  TMainForm = class(TForm)
-    bar_NavBar: TToolBar;
-    fly_FormsAbertos: TFlowLayout;
-    bt_Form1: TButton;
-    bt_Form2: TButton;
-    bt_Form3: TButton;
-    lyPaiFundo: TLayout;
-    lyHeader: TLayout;
-    imgFechar: TImage;
-    imgMinimizar: TImage;
-    lbSubTitulo: TLabel;
-    lbTitulo: TLabel;
-    lyPai: TLayout;
-    lyHeaderAcoes: TLayout;
-    procedure FormCreate(Sender: TObject);
-    procedure FormDestroy(Sender: TObject);
-    procedure bt_Form1Click(Sender: TObject);
-    procedure bt_Form2Click(Sender: TObject);
-    procedure bt_Form3Click(Sender: TObject);
-    procedure ChildFormClose(Sender: TObject);
-    procedure ChildFormMinimize(Sender: TObject);
-    procedure FormShow(Sender: TObject);
+
+  // Forward declaration
+  TChildFormInfo = class;
+
+  // A classe de informação do formulário.
+  TChildFormInfo = class
   private
-    procedure UpdateHeaderInfo(const AActiveLayout: TLayout);
-    procedure ChildFormOnClose(Sender: TObject; var Action: TCloseAction);
-    procedure TaskBarButtonClick(Sender: TObject);
-    procedure ShowChildForm(FormClass: TFormClass);
-    function FindChildForm(FormClass: TFormClass): TForm;
-    function FindChildLayout(Parent: TComponent): TLayout;
-    procedure CriaBotao(Form: TForm);
-    procedure CloseAnimationFinish(Sender: TObject);
-    procedure MinimizeAnimationFinish(Sender: TObject);
-    procedure RestoreAnimationFinish(Sender: TObject);
-    { Private declarations }
+    FForm: TForm;
+    FTaskButton: TSpeedButton;
+    FContentLayout: TLayout;
+    procedure FindContentLayout;
   public
-    { Public declarations }
+    constructor Create(AForm: TForm; ATaskButton: TSpeedButton);
+    destructor Destroy; override;
+
+    property Form: TForm read FForm;
+    property TaskButton: TSpeedButton read FTaskButton;
+    property ContentLayout: TLayout read FContentLayout;
   end;
 
-var
-  MainForm: TMainForm;
+  // O Gerenciador de Formulários
+  TFormManager = class(TObject)
+  private
+    // --- Referências da View ---
+    FParentLayout: TLayout;
+    FHeaderActionsLayout: TLayout;
+    FTaskBarLayout: TFlowLayout;
+    FTitleLabel: TLabel;
+    FSubTitleLabel: TLabel;
+    FMainFormHeight: Single;
+
+    // --- Estado Interno ---
+    FOpenForms: TDictionary<TFormClass, TChildFormInfo>;
+    FActiveFormInfo: TChildFormInfo;
+    FActivationHistory: TList<TChildFormInfo>;
+    FOwner: TComponent;
+    FHomeFormClass: TFormClass;
+    FIsDestroying: Boolean; // Flag para indicar que o gerenciador está sendo destruído
+
+    // --- Métodos Internos de Lógica e UI ---
+    procedure ActivateForm(AInfo: TChildFormInfo; AIsNew: Boolean);
+    procedure ChildFormOnClose(Sender: TObject; var Action: TCloseAction);
+    procedure TaskBarButtonClick(Sender: TObject);
+    procedure UpdateHeaderUI(AInfo: TChildFormInfo);
+
+    // --- Callbacks de Animação ---
+    procedure OnCloseAnimationFinished(Sender: TObject);
+    procedure OnMinimizeAnimationFinished(Sender: TObject);
+
+  public
+    constructor Create(
+      AOwner: TComponent;
+      AParentLayout: TLayout;
+      AHeaderActionsLayout: TLayout;
+      ATaskBarLayout: TFlowLayout;
+      ATitleLabel: TLabel;
+      ASubTitleLabel: TLabel;
+      AMainFormHeight: Single;
+      AHomeFormClass: TFormClass = nil
+    );
+    destructor Destroy; override;
+
+    // --- Comandos ---
+    procedure ShowForm(AFormClass: TFormClass);
+    procedure MinimizeActiveForm;
+    procedure CloseActiveForm;
+  end;
 
 implementation
 
-{$R *.fmx}
+//==============================================================================
+// TChildFormInfo
+//==============================================================================
 
-procedure TMainForm.FormCreate(Sender: TObject);
+constructor TChildFormInfo.Create(AForm: TForm; ATaskButton: TSpeedButton);
 begin
-  TaskBarList := TList<TTaskBarButton>.Create;
+  inherited Create;
+  FForm := AForm;
+  FTaskButton := ATaskButton;
+  FindContentLayout;
 end;
 
-procedure TMainForm.FormDestroy(Sender: TObject);
+destructor TChildFormInfo.Destroy;
 begin
-  TaskBarList.Free;
+  inherited Destroy;
 end;
 
-procedure TMainForm.FormShow(Sender: TObject);
-begin
-  lyHeader.Width := lyPai.Width;
-  ShowChildForm(TfrmHome);
-end;
-
-procedure TMainForm.bt_Form1Click(Sender: TObject);
-begin
-  ShowChildForm(TForm1);
-end;
-
-procedure TMainForm.bt_Form2Click(Sender: TObject);
-begin
-  ShowChildForm(TForm2);
-end;
-
-procedure TMainForm.bt_Form3Click(Sender: TObject);
-begin
-  ShowChildForm(TForm3);
-end;
-
-function TMainForm.FindChildForm(FormClass: TFormClass): TForm;
+procedure TChildFormInfo.FindContentLayout;
 var
-  TaskButton: TTaskBarButton;
+  I: Integer;
 begin
-  for TaskButton in TaskBarList do
-    if TaskButton.Form.ClassType = FormClass then
-      Exit(TForm(TaskButton.Form));
-  Result := nil;
+  FContentLayout := nil;
+  if not Assigned(FForm) then Exit;
+  for I := 0 to FForm.ComponentCount - 1 do
+    if (FForm.Components[I] is TLayout) and (SameText(FForm.Components[I].Name, 'lyConteudo')) then
+    begin
+      FContentLayout := TLayout(FForm.Components[I]);
+      Exit;
+    end;
 end;
 
-procedure TMainForm.ShowChildForm(FormClass: TFormClass);
-var
-  FormFilho: TForm;
-  lyFilho: TLayout;
-begin
-  FormFilho := FindChildForm(FormClass);
-  if not Assigned(FormFilho) then
-  begin
-    FormFilho := FormClass.Create(Application);
-    CriaBotao(FormFilho);
-    FormFilho.OnClose := ChildFormOnClose;
-  end;
+//==============================================================================
+// TFormManager
+//==============================================================================
 
-  if (FormFilho.ClassName = lyPai.TagString) then
+constructor TFormManager.Create(AOwner: TComponent; AParentLayout: TLayout;
+  AHeaderActionsLayout: TLayout; ATaskBarLayout: TFlowLayout;
+  ATitleLabel: TLabel; ASubTitleLabel: TLabel; AMainFormHeight: Single;
+  AHomeFormClass: TFormClass);
+begin
+  inherited Create;
+  // Armazena referências para os componentes da UI
+  FOwner := AOwner;
+  FParentLayout := AParentLayout;
+  FHeaderActionsLayout := AHeaderActionsLayout;
+  FTaskBarLayout := ATaskBarLayout;
+  FTitleLabel := ATitleLabel;
+  FSubTitleLabel := ASubTitleLabel;
+  FMainFormHeight := AMainFormHeight;
+  FHomeFormClass := AHomeFormClass;
+  FIsDestroying := False; // Inicializa a flag
+
+  // Inicializa o estado interno
+  FOpenForms := TDictionary<TFormClass, TChildFormInfo>.Create;
+  FActivationHistory := TList<TChildFormInfo>.Create;
+  FActiveFormInfo := nil;
+end;
+
+destructor TFormManager.Destroy;
+begin
+  FIsDestroying := True;
+  FActivationHistory.Free;
+  FOpenForms.Free;
+  inherited Destroy;
+end;
+
+procedure TFormManager.ShowForm(AFormClass: TFormClass);
+var
+  Info: TChildFormInfo;
+  IsNew: Boolean;
+begin
+  // Se o form clicado já for o ativo, não faz nada
+  if (FActiveFormInfo <> nil) and (FActiveFormInfo.Form.ClassType = AFormClass) then
     Exit;
 
-  lyFilho := FindChildLayout(FormFilho);
-  if Assigned(lyFilho) then
+  IsNew := not FOpenForms.TryGetValue(AFormClass, Info);
+  if IsNew then
   begin
-    if lyFilho.Parent <> lyPai then
-      lyFilho.Parent := lyPai;
+    var NewForm := AFormClass.Create(nil);
+    NewForm.OnClose := ChildFormOnClose;
+    var NewButton := TSpeedButton.Create(nil);
+    Info := TChildFormInfo.Create(NewForm, NewButton);
+    Info.TaskButton.TagObject := TObject(Info);
+    Info.TaskButton.OnClick := TaskBarButtonClick;
+    FOpenForms.Add(AFormClass, Info);
 
-    lyFilho.TagObject := FormFilho;
-    lyFilho.TagString := FormFilho.Caption;
-    lyFilho.Visible   := True;
-    lyFilho.Opacity   := 0;
-    lyFilho.BringToFront;
-
-    if (lyFilho.TagFloat = 0) then
+    with Info.TaskButton do
     begin
-      lyFilho.Scale.Y := 0;
-      TAnimator.AnimateFloat(lyFilho, 'Scale.Y', 1, 0.3);
-      TAnimator.AnimateFloat(lyFilho, 'Opacity', 1, 0.3);
-    end
-    else if (lyFilho.TagFloat = 1) then
-    begin
-      TAnimator.AnimateFloat(lyFilho, 'Opacity', 1, 0.3);
-    end
-    else if (lyFilho.TagFloat > 1) then
-    begin
-      lyFilho.Position.Y := lyFilho.TagFloat;
-      TAnimator.AnimateFloat(lyFilho, 'Position.Y', 0, 0.3);
-      TAnimator.AnimateFloat(lyFilho, 'Opacity', 1, 0.3);
+      Parent := FTaskBarLayout;
+      Text := Info.Form.Caption;
     end;
-
-    lyFilho.TagFloat := 1;
-    UpdateHeaderInfo(lyFilho);
-    lyPai.Repaint;
   end;
+
+  ActivateForm(Info, IsNew);
 end;
 
-procedure TMainForm.CriaBotao(Form: TForm);
-var
-  BTN: TTaskBarButton;
+// =============================================================================
+// ALTERAÇÃO PRINCIPAL ABAIXO
+// =============================================================================
+procedure TFormManager.ActivateForm(AInfo: TChildFormInfo; AIsNew: Boolean);
 begin
-  BTN.Form := Form;
-  BTN.Button := TSpeedButton.Create(fly_FormsAbertos);
-  with BTN.Button do
-  begin
-    Parent := fly_FormsAbertos;
-    Text := Form.Caption;
-    TagObject := Form;
-    OnClick := TaskBarButtonClick;
-  end;
-  TaskBarList.Add(BTN);
-end;
-
-procedure TMainForm.ChildFormOnClose(Sender: TObject; var Action: TCloseAction);
-var
-  I: Integer;
-  Frm: TCommonCustomForm;
-begin
-  Frm := TCommonCustomForm(Sender);
-  for I := TaskBarList.Count - 1 downto 0 do
-    if TaskBarList[I].Form = Frm then
-    begin
-      TaskBarList[I].Button.Free;
-      TaskBarList.Delete(I);
-      Frm := nil;
-      Break;
-    end;
-  Action := TCloseAction.caFree;
-end;
-
-procedure TMainForm.ChildFormClose(Sender: TObject);
-var
-  I: Integer;
-  ly: TLayout;
-  frm: TCommonCustomForm;
-  AnimOpacity, AnimScale: TFloatAnimation;
-begin
-  for I := lyPai.ChildrenCount - 1 downto 0 do
-  begin
-    if (lyPai.Children[I] is TLayout) and (TLayout(lyPai.Children[I]).Visible) then
-    begin
-      ly  := TLayout(lyPai.Children[I]);
-      frm := TCommonCustomForm(ly.TagObject);
-
-      // --- INÍCIO DA CORREÇÃO ---
-      // Desativa o alinhamento para ter controlo total
-      ly.Align := TAlignLayout.None;
-      // Força o processamento de mensagens para que a alteração de Align seja aplicada
-      // antes de a animação começar.
-      Application.ProcessMessages;
-      // --- FIM DA CORREÇÃO ---
-
-      AnimOpacity := TFloatAnimation.Create(ly);
-      AnimOpacity.Parent := ly;
-      AnimOpacity.AnimationType := TAnimationType.Out;
-      AnimOpacity.Interpolation := TInterpolationType.Quadratic;
-      AnimOpacity.Duration := 0.3;
-      AnimOpacity.PropertyName := 'Opacity';
-      AnimOpacity.StopValue := 0;
-      AnimOpacity.Start;
-
-      AnimScale := TFloatAnimation.Create(ly);
-      AnimScale.Parent := ly;
-      AnimScale.AnimationType := TAnimationType.Out;
-      AnimScale.Interpolation := TInterpolationType.Quadratic;
-      AnimScale.Duration := 0.3;
-      AnimScale.PropertyName := 'Scale.Y';
-      AnimScale.StopValue := 0;
-
-      AnimScale.Tag := NativeInt(frm);
-      AnimScale.OnFinish := CloseAnimationFinish;
-      AnimScale.Start;
-
-      lyPai.Repaint;
-      Exit;
-    end;
-  end;
-end;
-
-procedure TMainForm.ChildFormMinimize(Sender: TObject);
-var
-  I: Integer;
-  ly: TLayout;
-  AnimPos, AnimOpacity: TFloatAnimation;
-begin
-  for I := lyPai.ChildrenCount - 1 downto 0 do
-  begin
-    if (lyPai.Children[I] is TLayout) and (TLayout(lyPai.Children[I]).Visible) then
-    begin
-      ly := TLayout(lyPai.Children[I]);
-
-      // --- INÍCIO DA CORREÇÃO ---
-      // Desativa o alinhamento para ter controlo total
-      ly.Align := TAlignLayout.None;
-      // Força o processamento de mensagens para que a alteração de Align seja aplicada
-      Application.ProcessMessages;
-      // --- FIM DA CORREÇÃO ---
-
-      ly.TagFloat := MainForm.Height;
-
-      AnimOpacity := TFloatAnimation.Create(ly);
-      AnimOpacity.Parent := ly;
-      AnimOpacity.AnimationType := TAnimationType.Out;
-      AnimOpacity.Interpolation := TInterpolationType.Quadratic;
-      AnimOpacity.Duration := 0.3;
-      AnimOpacity.PropertyName := 'Opacity';
-      AnimOpacity.StopValue := 0;
-      AnimOpacity.Start;
-
-      AnimPos := TFloatAnimation.Create(ly);
-      AnimPos.Parent := ly;
-      AnimPos.Duration := 0.3;
-      AnimPos.PropertyName := 'Position.Y';
-      AnimPos.StopValue := MainForm.Height;
-
-      AnimPos.Tag := NativeInt(ly);
-      AnimPos.OnFinish := MinimizeAnimationFinish;
-      AnimPos.Start;
-
-      Exit;
-    end;
-  end;
-end;
-
-procedure TMainForm.TaskBarButtonClick(Sender: TObject);
-var
-  Btn: TSpeedButton;
-  Frm: TCommonCustomForm;
-  lyFilho: TLayout;
-  Anim: TFloatAnimation;
-begin
-  Btn := Sender as TSpeedButton;
-  Frm := TCommonCustomForm(Btn.TagObject);
-
-  if (Frm.ClassName = lyPai.TagString) then
+  if not Assigned(AInfo) or not Assigned(AInfo.ContentLayout) then
     Exit;
 
-  lyFilho := FindChildLayout(Frm);
-  if Assigned(lyFilho) then
+  var Layout := AInfo.ContentLayout;
+
+  if Layout.Parent <> FParentLayout then
+    Layout.Parent := FParentLayout;
+
+  // Traz o layout do novo form para a frente
+  Layout.BringToFront;
+
+  if AIsNew then
   begin
-    if lyFilho.Parent <> lyPai then
-      lyFilho.Parent := lyPai;
-
-    lyFilho.Visible := True;
-    lyFilho.Opacity := 0;
-    lyFilho.BringToFront;
-
-    TAnimator.AnimateFloat(lyFilho, 'Opacity', 1, 0.3);
-
-    if not (lyFilho.TagFloat = 0) then
+    // ANIMAÇÃO PARA FORM NOVO: Escala de 0 a 1 no eixo Y
+    Layout.Align := TAlignLayout.Client;
+    Layout.Visible := True;
+    Layout.Opacity := 1;
+    Layout.Scale.Y := 0.0;
+    TAnimator.AnimateFloat(Layout, 'Scale.Y', 1, 0.3, TAnimationType.Out, TInterpolationType.Quadratic);
+  end
+  else
+  begin
+    // O FORM JÁ EXISTE. VERIFICA SE ESTAVA MINIMIZADO OU SÓ EM SEGUNDO PLANO
+    // A propriedade 'Visible' do layout é setada para False quando o form é minimizado.
+    if not Layout.Visible then
     begin
-      lyFilho.Position.Y := lyFilho.TagFloat;
-
-      Anim := TFloatAnimation.Create(lyFilho);
-      Anim.Parent := lyFilho;
-      Anim.Duration := 0.3;
-      Anim.PropertyName := 'Position.Y';
-      Anim.StopValue := 0;
-
-      Anim.Tag := NativeInt(lyFilho);
-      Anim.OnFinish := RestoreAnimationFinish;
-      Anim.Start;
+      // ANIMAÇÃO PARA "DESMINIMIZAR": Sobe da base da tela
+      Layout.Align := TAlignLayout.Client; // Restaura o alinhamento
+      Layout.Visible := True;
+      Layout.Opacity := 1;
+      Layout.Position.Y := FMainFormHeight; // Posição inicial da animação
+      TAnimator.AnimateFloat(Layout, 'Position.Y', 0, 0.3, TAnimationType.Out, TInterpolationType.Quadratic);
     end
     else
     begin
-      if lyFilho.Align = TAlignLayout.None then
-        lyFilho.Align := TAlignLayout.Client;
-      lyFilho.TagFloat := 1;
+      // ANIMAÇÃO SOLICITADA: O form já estava visível, mas atrás de outro.
+      // Usa Opacity para trazê-lo à frente.
+      Layout.Align := TAlignLayout.Client;
+      Layout.Visible := True;
+      Layout.Opacity := 0; // Inicia transparente
+      TAnimator.AnimateFloat(Layout, 'Opacity', 1, 0.25); // Animação de fade-in
     end;
-
-    UpdateHeaderInfo(lyFilho);
-    lyPai.Repaint;
   end;
+
+  FParentLayout.Repaint;
+
+  FActivationHistory.Remove(AInfo);
+  FActivationHistory.Add(AInfo);
+  FActiveFormInfo := AInfo;
+  UpdateHeaderUI(AInfo);
 end;
 
-procedure TMainForm.CloseAnimationFinish(Sender: TObject);
-var
-  Anim: TAnimation;
-  frm: TCommonCustomForm;
-  ClosingLayout, NewTopLayout: TLayout;
-  I: Integer;
+procedure TFormManager.UpdateHeaderUI(AInfo: TChildFormInfo);
 begin
-  Anim := Sender as TAnimation;
-  frm := TCommonCustomForm(TObject(Anim.Tag));
+  if not Assigned(AInfo) then
+  begin
+    FTitleLabel.Text := 'Nenhum formulário ativo';
+    FSubTitleLabel.Text := '';
+    TAnimator.AnimateFloat(FHeaderActionsLayout, 'Scale.Y', 0, 0.3);
+    Exit;
+  end;
 
-  if (Anim.Parent is TLayout) then
-    ClosingLayout := TLayout(Anim.Parent)
+  FTitleLabel.Text := AInfo.Form.Caption;
+  FSubTitleLabel.Text := AInfo.Form.ClassName;
+
+  var TargetScale: Single := 1;
+  if Assigned(FHomeFormClass) and (AInfo.Form.ClassType = FHomeFormClass) then
+    TargetScale := 0;
+
+  if FHeaderActionsLayout.Scale.Y <> TargetScale then
+    TAnimator.AnimateFloat(FHeaderActionsLayout, 'Scale.Y', TargetScale, 0.3);
+end;
+
+procedure TFormManager.TaskBarButtonClick(Sender: TObject);
+var
+  Btn: TSpeedButton;
+  Info: TChildFormInfo;
+begin
+  Btn := Sender as TSpeedButton;
+  Info := TChildFormInfo(Btn.TagObject);
+  if (FActiveFormInfo <> Info) and Assigned(Info) then
+    ActivateForm(Info, False);
+end;
+
+procedure TFormManager.ChildFormOnClose(Sender: TObject; var Action: TCloseAction);
+var
+  FormToClose: TForm;
+  Info: TChildFormInfo;
+begin
+  FormToClose := Sender as TForm;
+  if FOpenForms.TryGetValue(TFormClass(FormToClose.ClassType), Info) then
+  begin
+    FActivationHistory.Remove(Info);
+    FOpenForms.Remove(TFormClass(FormToClose.ClassType));
+
+    Info.TaskButton.Free;
+
+    if not FIsDestroying then
+    begin
+      if FActiveFormInfo = Info then
+      begin
+        FActiveFormInfo := nil;
+        if FActivationHistory.Count > 0 then
+          ActivateForm(FActivationHistory.Last, False)
+        else
+          UpdateHeaderUI(nil);
+      end;
+    end;
+
+    Info.Free;
+  end;
+  Action := TCloseAction.caFree;
+end;
+
+procedure TFormManager.CloseActiveForm;
+begin
+  if not Assigned(FActiveFormInfo) or (Assigned(FHomeFormClass) and (FActiveFormInfo.Form.ClassType = FHomeFormClass)) then
+    Exit;
+
+  var Layout := FActiveFormInfo.ContentLayout;
+  var FormToClose := FActiveFormInfo.Form;
+
+  var Anim := TFloatAnimation.Create(Layout);
+  Anim.Parent := Layout;
+  Anim.PropertyName := 'Opacity';
+  Anim.StartValue := 1;
+  Anim.StopValue := 0;
+  Anim.Duration := 0.3;
+  Anim.TagObject := FormToClose;
+  Anim.OnFinish := OnCloseAnimationFinished;
+  Anim.Start;
+end;
+
+procedure TFormManager.MinimizeActiveForm;
+begin
+  if not Assigned(FActiveFormInfo) then
+    Exit;
+
+  var Layout := FActiveFormInfo.ContentLayout;
+  Layout.Align := TAlignLayout.None; // Importante para a animação de posição
+
+  var AnimPos := TFloatAnimation.Create(Layout);
+  AnimPos.Parent := Layout;
+  AnimPos.PropertyName := 'Position.Y';
+  AnimPos.StartValue := 0;
+  AnimPos.StopValue := FMainFormHeight;
+  AnimPos.Duration := 0.3;
+  AnimPos.TagObject := FActiveFormInfo;
+  AnimPos.OnFinish := OnMinimizeAnimationFinished;
+  AnimPos.Start;
+
+  FActiveFormInfo := nil;
+end;
+
+procedure TFormManager.OnCloseAnimationFinished(Sender: TObject);
+var
+  Anim: TFloatAnimation;
+  FormToClose: TForm;
+begin
+  if FIsDestroying then Exit;
+
+  Anim := Sender as TFloatAnimation;
+  FormToClose := TForm(Anim.TagObject);
+  if Assigned(FormToClose) then
+    FormToClose.Close;
+  Anim.OnFinish := nil;
+end;
+
+procedure TFormManager.OnMinimizeAnimationFinished(Sender: TObject);
+var
+  Anim: TFloatAnimation;
+  MinimizedInfo: TChildFormInfo;
+begin
+  if FIsDestroying then Exit;
+
+  Anim := Sender as TFloatAnimation;
+  MinimizedInfo := TChildFormInfo(Anim.TagObject);
+
+  if Assigned(MinimizedInfo) then
+  begin
+    // É aqui que marcamos o layout como não visível,
+    // permitindo que a lógica em 'ActivateForm' funcione.
+    MinimizedInfo.ContentLayout.Visible := False;
+    FActivationHistory.Remove(MinimizedInfo);
+  end;
+
+  if FActivationHistory.Count > 0 then
+    ActivateForm(FActivationHistory.Last, False)
   else
-    ClosingLayout := nil;
+    UpdateHeaderUI(nil);
 
-  if Assigned(frm) then
-    frm.Close;
-
-  NewTopLayout := nil;
-  for I := lyPai.ChildrenCount - 1 downto 0 do
-  begin
-    if (lyPai.Children[I] is TLayout) then
-    begin
-      if TObject(lyPai.Children[I]) = TObject(ClosingLayout) then
-        Continue;
-
-      if (TLayout(lyPai.Children[I]).Visible) then
-      begin
-        NewTopLayout := TLayout(lyPai.Children[I]);
-        break;
-      end;
-    end;
-  end;
-
-  if Assigned(NewTopLayout) then
-    UpdateHeaderInfo(NewTopLayout);
-
-  lyPai.Repaint;
-end;
-
-procedure TMainForm.MinimizeAnimationFinish(Sender: TObject);
-var
-  Anim: TAnimation;
-  ly, NewTopLayout: TLayout;
-  I: Integer;
-begin
-  Anim := Sender as TAnimation;
-  ly := TLayout(TObject(Anim.Tag));
-  if Assigned(ly) then
-  begin
-    ly.SendToBack;
-    ly.Visible := False;
-
-    NewTopLayout := nil;
-    for I := lyPai.ChildrenCount - 1 downto 0 do
-    begin
-      if (lyPai.Children[I] is TLayout) and (TLayout(lyPai.Children[I]).Visible) then
-      begin
-        NewTopLayout := TLayout(lyPai.Children[I]);
-        break;
-      end;
-    end;
-
-    if Assigned(NewTopLayout) then
-      UpdateHeaderInfo(NewTopLayout);
-
-    lyPai.Repaint;
-  end;
-end;
-
-procedure TMainForm.RestoreAnimationFinish(Sender: TObject);
-var
-  Anim: TAnimation;
-  ly: TLayout;
-begin
-  Anim := Sender as TAnimation;
-  ly := TLayout(TObject(Anim.Tag));
-  if Assigned(ly) then
-  begin
-    if ly.Align = TAlignLayout.None then
-      ly.Align := TAlignLayout.Client;
-    ly.TagFloat := 1;
-  end;
-end;
-
-function TMainForm.FindChildLayout(Parent: TComponent): TLayout;
-var
-  I: Integer;
-begin
-  Result := nil;
-  if not Assigned(Parent) then
-    Exit;
-  for I := 0 to Parent.ComponentCount - 1 do
-  begin
-    if (Parent.Components[I] is TLayout) then
-      if (SameText(Parent.Components[I].Name, 'lyConteudo')) then
-      begin
-        Result := TLayout(Parent.Components[I]);
-        Exit;
-      end;
-  end;
-end;
-
-procedure TMainForm.UpdateHeaderInfo(const AActiveLayout: TLayout);
-var
-  ChildForm: TForm;
-begin
-  if not Assigned(AActiveLayout) then
-    Exit;
-
-  lbTitulo.Text := AActiveLayout.TagString;
-
-  if AActiveLayout.TagObject is TForm then
-  begin
-    ChildForm := TForm(AActiveLayout.TagObject);
-    lbSubTitulo.Text := ChildForm.ClassName;
-    lyPai.TagString := ChildForm.ClassName;
-
-    if (lyPai.ChildrenCount > 1) and (not (ChildForm is TfrmHome)) and (lyHeaderAcoes.Scale.Y = 0) then
-      TAnimator.AnimateFloat(lyHeaderAcoes, 'Scale.Y', 1, 0.3)
-    else if (lyHeaderAcoes.Scale.Y = 1) and (ChildForm is TfrmHome) then
-      TAnimator.AnimateFloat(lyHeaderAcoes, 'Scale.Y', 0, 0.3);
-  end;
+  FParentLayout.Repaint;
+  Anim.OnFinish := nil;
 end;
 
 end.
